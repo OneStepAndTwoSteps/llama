@@ -130,6 +130,7 @@ class Llama:
         eos_reached = torch.tensor([False] * bsz, device="cuda") # 用于判断prompt中的每个句子是否已经处理完成
         input_text_mask = tokens != pad_id #mask 标记那些不是填充字的地方
         for cur_pos in range(min_prompt_len, total_len):
+            # 第一次进行 seq_len 大于等于1，后面的seq_len都是1
             logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos) # 以每个句子中的[prev_pos:cur_pos]部分作为输入去推理
             if logprobs:
                 # 如果开启了计算概率，就会把当前输出的序列logits，与原始提示中的序列右移一位之后
@@ -150,6 +151,8 @@ class Llama:
             next_token = next_token.reshape(-1)
             # only replace token if prompt has already been generated
             next_token = torch.where(
+                # 它会将新的token添加到已生成的token的末尾。如果当前位置是输入文本的token，
+                # 那么它会保留原来的token；否则，它会替换为新的token。
                 input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token
             )
             tokens[:, cur_pos] = next_token
@@ -159,7 +162,10 @@ class Llama:
             prev_pos = cur_pos
             if all(eos_reached):
                 break
-
+                
+        # 在这个部分，函数首先将token和对数概率转换为列表。然后，它会遍历每个生成的文本，
+        # 将其截断到最大生成长度，并去掉结束token之后的token。
+        # 最后，它会返回生成的token和它们的对数概率（如果logprobs为True）。
         if logprobs:
             token_logprobs = token_logprobs.tolist()
         out_tokens, out_logprobs = [], []
